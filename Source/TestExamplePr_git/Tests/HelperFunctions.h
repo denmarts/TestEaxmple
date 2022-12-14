@@ -7,12 +7,21 @@
 class HelperFunctions
 {
 	public:
+		struct multiparam_fps
+		{
+			float FPS;
+			FVector PlayerPosition;
+			FRotator CameraRotation;
+		};
 		static UWorld* GetTestWorld();
 		static int32 GetActionBindingsIndexByName(UInputComponent* InputComp, const FString& ActionName, EInputEvent InputEvent);
 		static int32 GetAxisBindingsIndexByName(UInputComponent* InputComp, const FString& AxisName);
 		static int32 CountingObjectsOnTheMap(const UWorld* World, const AActor* Actor);
 		static int32 CountingObjectsOnTheMap(const UWorld* World, UClass* ClassOfTheActor);
 		static FString GetTestDataDir();
+		static void GetFPS(const UWorld* World, TArray<float>* FPS);
+		static float GetAvarageFPS(TArray<float>* FPS);
+		static multiparam_fps GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character);
 };
 
 //Класс позволяющий выполнять определенную функцию определенное количество времени.

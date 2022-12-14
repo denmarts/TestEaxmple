@@ -19,9 +19,6 @@
 #include "Components/SplineMovementController.h"
 #include "GameFramework/Actor.h"
 #include "Camera/CameraActor.h"
-#include "Kismet/GameplayStatics.h"
-#include "Components/SplineComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
 
 // Функции для непосредственного тестирования:
 //   TestTrue(TEXT("Некоторое сообщение которое пишется в log если проверка не прошла"), bool <Проверочное предполагаемо логически верное значение>); -> пример использования в тесте "TestTrueExample"
@@ -51,13 +48,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSlightlyMoreComplicatedControlInputSimulationT
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimpleMouseInputSimulationTest, "Autotests.SimpleMouseInputSimulationTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRecordingInputSimulationTest, "Autotests.SimpleRecordingInputSimulationTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSplineMovementSimulation, "Autotests.SplineMovementSimulation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoupleOfDifferentActorsCanDoThingsSimultaniously, "Experimental.CoupleOfDifferentActorsCanDoThingsSimultaniously", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoupleOfDifferentActorsCanDoThingsSimultaniously, "Autotests.CoupleOfDifferentActorsCanDoThingsSimultaniously", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 // Тестов в одном файле может быть столько сколько нужно, но желательно структурировать их в отдельные файлы ориентируясь на назначения
 
 //В данной категории находятся тесты, которые либо не работают должным образом, либо не доделаны, либо крашат эдитор
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckExample, "Experimental.CheckTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWorldExists, "Experimental.WorldExistsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckAddWarningAndAddExpectedErrorExample, "Experimental.CheckAddWarningAndAddExpectedErrorTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFPSMeasurmentsTest, "Experimental.FPSMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 
 // Подход с использованием COMPLEX_AUTOMATION_TEST отличается от SIMPLE_AUTOMATION_TEST лишь тем, что в нем присутствует вспомогательная функция GetTests()
 // Благодаря которой можно формировать массив параметров OutBeautifiedNames (по сути это пути расположения тестов в Session Frontend, как вот этот -> "Experimental.MapsShouldBeLoaded")
@@ -845,4 +843,48 @@ bool FCoupleOfDifferentActorsCanDoThingsSimultaniously::RunTest(const FString& P
     ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
     return true;
 }
+
+bool FFPSMeasurmentsTest::RunTest(const FString& Parameters)
+{
+    AddInfo(TEXT("FPSMeasurmentsTest is running"));
+
+    AutomationOpenMap(TEXT("/Game/Tests/EmptyLevel_Testable_ForRun"));
+    UWorld* World = HelperFunctions::GetTestWorld();
+    TestNotNull(TEXT("World exist"), World);
+    
+    ACharacter* Character = UGameplayStatics::GetPlayerCharacter(World, 0);
+    TestNotNull(TEXT("Character exist"), Character);
+
+    const char* goldenSpherePath = "Blueprint'/Game/Collectibles/GoldenSphere.GoldenSphere'";
+    const UBlueprint* goldenSphere = LoadObject<UBlueprint>(nullptr, *FString(goldenSpherePath));
+    TestNotNull(TEXT("Blueprint exist"), goldenSphere);
+    
+    const int32 MovingIndex = HelperFunctions::GetAxisBindingsIndexByName(Character->InputComponent, "Move Forward / Backward"); //"Move Forward / Backward" - это направления движения. Посмотреть уже предусмотренные бинды можно в Settings->Project Settings->Inputs. 
+    UE_LOG(LogTemp, Warning, TEXT("Current moving index is: %i"), MovingIndex);
+
+    UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres before: %i"), HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass));
+    TArray<HelperFunctions::multiparam_fps>* LinkedFPS;
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(3.0f)); 
+    ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilCommand([=]()
+    {
+        LinkedFPS->Add(HelperFunctions::GetFPSwithCurrentPosition(World, Character));
+        Character->InputComponent->AxisBindings[MovingIndex].AxisDelegate.Execute(1.0f); //1.0f - это scale данного бинда. Могут быть разными, открывайте конкретный бинд и ищите нужное значение. Для движения вперед scope = 1.0f. Назад, к примеру, будет -1.0f 
+    }, [=]()
+    {
+        for(const auto currentCompFPS : *LinkedFPS)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("%f FPS was spotted at %f %f %f position, and camera rotation was %f %f %f"),
+                currentCompFPS.FPS, currentCompFPS.PlayerPosition.X, currentCompFPS.PlayerPosition.Y, currentCompFPS.PlayerPosition.Z,
+                currentCompFPS.CameraRotation.Pitch, currentCompFPS.CameraRotation.Yaw, currentCompFPS.CameraRotation.Roll);
+        }
+        const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
+        UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
+        TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
+    },
+    2.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
+    
+    return true;
+} 
 //#endif

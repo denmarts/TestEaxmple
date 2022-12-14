@@ -1,4 +1,6 @@
 ﻿#include "HelperFunctions.h"
+
+#include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 
 UWorld* HelperFunctions::GetTestWorld() 
@@ -76,6 +78,37 @@ int32 HelperFunctions::CountingObjectsOnTheMap(const UWorld* World, UClass* Clas
 FString HelperFunctions::GetTestDataDir()
 {
     return FPaths::GameSourceDir().Append("TestExamplePr_git/Tests/Data/");
+}
+
+void HelperFunctions::GetFPS(const UWorld* World, TArray<float>* FPS)
+{
+    if(World && FPS)
+    {
+        FPS->Add(1.0f / World->GetDeltaSeconds());
+    }
+}
+
+float HelperFunctions::GetAvarageFPS(TArray<float>* FPS)
+{
+    if(FPS->Num() > 0)
+    {
+        float avarageFPS = 0.0f;
+        for(const auto currentFPS : *FPS)
+        {
+            avarageFPS += currentFPS;
+        }
+        return avarageFPS /= FPS->Num();
+    }
+    return -1.0f;
+}
+
+HelperFunctions::multiparam_fps HelperFunctions::GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character)
+{
+    if(World && Character)
+    {
+        return {1.0f / World->GetDeltaSeconds(), Character->GetActorLocation(), Character->GetViewRotation()};
+    }
+    return {-1.0, FVector{}, FRotator{}};
 }
 
 /**
