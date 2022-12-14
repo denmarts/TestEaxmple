@@ -1,6 +1,7 @@
 ﻿#include "HelperFunctions.h"
 
 #include "GameFramework/Character.h"
+#include "HAL/PlatformMemoryHelpers.h"
 #include "Kismet/GameplayStatics.h"
 
 UWorld* HelperFunctions::GetTestWorld() 
@@ -102,11 +103,42 @@ float HelperFunctions::GetAvarageFPS(TArray<float>* FPS)
     return -1.0f;
 }
 
-HelperFunctions::multiparam_fps HelperFunctions::GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character)
+HelperFunctions::multiparam_fps_ram HelperFunctions::GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character)
 {
     if(World && Character)
     {
         return {1.0f / World->GetDeltaSeconds(), Character->GetActorLocation(), Character->GetViewRotation()};
+    }
+    return {-1.0, FVector{}, FRotator{}};
+}
+
+void HelperFunctions::GetRAM(TArray<float>* RAM)
+{
+    if(RAM)
+    {
+        RAM->Add(PlatformMemoryHelpers::GetFrameMemoryStats().UsedPhysical / 1.0e+6);
+    }
+}
+
+float HelperFunctions::GetAvarageRAM(TArray<float>* RAM)
+{
+    if(RAM->Num() > 0)
+    {
+        float avarageRAM = 0.0f;
+        for(const auto currentFPS : *RAM)
+        {
+            avarageRAM += currentFPS;
+        }
+        return avarageRAM /= RAM->Num();
+    }
+    return -1.0f;
+}
+
+HelperFunctions::multiparam_fps_ram HelperFunctions::GetRAMwithCurrentPosition(const ACharacter* Character)
+{
+    if(Character)
+    {
+        return {static_cast<float>(PlatformMemoryHelpers::GetFrameMemoryStats().UsedPhysical / 1.0e+6), Character->GetActorLocation(), Character->GetViewRotation()};
     }
     return {-1.0, FVector{}, FRotator{}};
 }

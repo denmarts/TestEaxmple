@@ -19,6 +19,8 @@
 #include "Components/SplineMovementController.h"
 #include "GameFramework/Actor.h"
 #include "Camera/CameraActor.h"
+#include "HAL/PlatformMemoryHelpers.h"
+#include "MainFrame/Private/MainFrameModule.h"
 
 // Функции для непосредственного тестирования:
 //   TestTrue(TEXT("Некоторое сообщение которое пишется в log если проверка не прошла"), bool <Проверочное предполагаемо логически верное значение>); -> пример использования в тесте "TestTrueExample"
@@ -49,13 +51,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimpleMouseInputSimulationTest, "Autotests.Sim
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRecordingInputSimulationTest, "Autotests.SimpleRecordingInputSimulationTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSplineMovementSimulation, "Autotests.SplineMovementSimulation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoupleOfDifferentActorsCanDoThingsSimultaniously, "Autotests.CoupleOfDifferentActorsCanDoThingsSimultaniously", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFPSMeasurmentsTest, "Autotests.FPSMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRAMMeasurmentsTest, "Autotests.RAMMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 // Тестов в одном файле может быть столько сколько нужно, но желательно структурировать их в отдельные файлы ориентируясь на назначения
 
 //В данной категории находятся тесты, которые либо не работают должным образом, либо не доделаны, либо крашат эдитор
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckExample, "Experimental.CheckTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWorldExists, "Experimental.WorldExistsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckAddWarningAndAddExpectedErrorExample, "Experimental.CheckAddWarningAndAddExpectedErrorTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFPSMeasurmentsTest, "Experimental.FPSMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 
 // Подход с использованием COMPLEX_AUTOMATION_TEST отличается от SIMPLE_AUTOMATION_TEST лишь тем, что в нем присутствует вспомогательная функция GetTests()
 // Благодаря которой можно формировать массив параметров OutBeautifiedNames (по сути это пути расположения тестов в Session Frontend, как вот этот -> "Experimental.MapsShouldBeLoaded")
@@ -844,6 +847,7 @@ bool FCoupleOfDifferentActorsCanDoThingsSimultaniously::RunTest(const FString& P
     return true;
 }
 
+//Универсальный тест позволяющий фиксировать метрики FPS во время его выполнения (данный тест базируется на тесте FSimpleControlInputSimulationTest)
 bool FFPSMeasurmentsTest::RunTest(const FString& Parameters)
 {
     AddInfo(TEXT("FPSMeasurmentsTest is running"));
@@ -863,28 +867,87 @@ bool FFPSMeasurmentsTest::RunTest(const FString& Parameters)
     UE_LOG(LogTemp, Warning, TEXT("Current moving index is: %i"), MovingIndex);
 
     UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres before: %i"), HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass));
-    TArray<HelperFunctions::multiparam_fps>* LinkedFPS;
+
+    //Создаем массив для последующей записи туда необходимых метрик
+    //По закрытию теста на данный момет эдитор может вылетать, по причине использования raw-поинтера, следует детальнее
+    //изучить тему использования smart-поинтеров в контесте Unreal Engine
+    TArray<HelperFunctions::multiparam_fps_ram>* LinkedFPS;
     
     ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(3.0f)); 
     ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilCommand([=]()
     {
+        //Заполняем массив полученными метриками FPS через латентную команду (детали работы функции ищите в HelperFunctions)
         LinkedFPS->Add(HelperFunctions::GetFPSwithCurrentPosition(World, Character));
         Character->InputComponent->AxisBindings[MovingIndex].AxisDelegate.Execute(1.0f); //1.0f - это scale данного бинда. Могут быть разными, открывайте конкретный бинд и ищите нужное значение. Для движения вперед scope = 1.0f. Назад, к примеру, будет -1.0f 
     }, [=]()
     {
+        //Проходимся по массиву и выдаем метрики с привязкой к местоположению персонажа и углу поворота его камеры
         for(const auto currentCompFPS : *LinkedFPS)
         {
             UE_LOG(LogTemp, Warning, TEXT("%f FPS was spotted at %f %f %f position, and camera rotation was %f %f %f"),
-                currentCompFPS.FPS, currentCompFPS.PlayerPosition.X, currentCompFPS.PlayerPosition.Y, currentCompFPS.PlayerPosition.Z,
+                currentCompFPS.FPS_or_RAM, currentCompFPS.PlayerPosition.X, currentCompFPS.PlayerPosition.Y, currentCompFPS.PlayerPosition.Z,
                 currentCompFPS.CameraRotation.Pitch, currentCompFPS.CameraRotation.Yaw, currentCompFPS.CameraRotation.Roll);
         }
         const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
         UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
         TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
+        
+        //Частично решает проблему, мануально через delete очистить данный массив поинтеров в контексте латентной команды
+        //не удается.
+        LinkedFPS->Empty();
     },
     2.0f));
     ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
-    
     return true;
-} 
+}
+
+//Windows-only Тест позволяющий фиксировать метрики RAM во время его выполнения (данный тест базируется на тесте FSimpleControlInputSimulationTest)
+bool FRAMMeasurmentsTest::RunTest(const FString& Parameters)
+{
+    AutomationOpenMap(TEXT("/Game/Tests/EmptyLevel_Testable_ForRun"));
+    UWorld* World = HelperFunctions::GetTestWorld();
+    TestNotNull(TEXT("World exist"), World);
+    
+    ACharacter* Character = UGameplayStatics::GetPlayerCharacter(World, 0);
+    TestNotNull(TEXT("Character exist"), Character);
+
+    const char* goldenSpherePath = "Blueprint'/Game/Collectibles/GoldenSphere.GoldenSphere'";
+    const UBlueprint* goldenSphere = LoadObject<UBlueprint>(nullptr, *FString(goldenSpherePath));
+    TestNotNull(TEXT("Blueprint exist"), goldenSphere);
+    
+    const int32 MovingIndex = HelperFunctions::GetAxisBindingsIndexByName(Character->InputComponent, "Move Forward / Backward"); //"Move Forward / Backward" - это направления движения. Посмотреть уже предусмотренные бинды можно в Settings->Project Settings->Inputs. 
+    UE_LOG(LogTemp, Warning, TEXT("Current moving index is: %i"), MovingIndex);
+
+    UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres before: %i"), HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass));
+
+    //Такая же история как и в тесте выше
+    TArray<HelperFunctions::multiparam_fps_ram>* LinkedRAM;
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(3.0f)); 
+    ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilCommand([=]()
+    {
+        LinkedRAM->Add(HelperFunctions::GetRAMwithCurrentPosition(Character));
+        Character->InputComponent->AxisBindings[MovingIndex].AxisDelegate.Execute(1.0f); 
+    }, [=]()
+    {
+        //И тут тоже такая же история как в тесте выше
+        for(const auto currentCompRAM : *LinkedRAM)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("%f RAM usage was spotted at %f %f %f position, and camera rotation was %f %f %f"),
+                currentCompRAM.FPS_or_RAM, currentCompRAM.PlayerPosition.X, currentCompRAM.PlayerPosition.Y, currentCompRAM.PlayerPosition.Z,
+                currentCompRAM.CameraRotation.Pitch, currentCompRAM.CameraRotation.Yaw, currentCompRAM.CameraRotation.Roll);
+        }
+        const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
+        UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
+        TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
+
+        //И тут, к сожалению, история такая же как и в тесте выше
+        LinkedRAM->Empty();
+    },
+    2.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
+    return true;
+}
+
+
 //#endif

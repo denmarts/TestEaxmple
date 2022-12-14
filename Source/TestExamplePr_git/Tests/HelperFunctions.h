@@ -7,9 +7,9 @@
 class HelperFunctions
 {
 	public:
-		struct multiparam_fps
+		struct multiparam_fps_ram
 		{
-			float FPS;
+			float FPS_or_RAM;
 			FVector PlayerPosition;
 			FRotator CameraRotation;
 		};
@@ -21,7 +21,10 @@ class HelperFunctions
 		static FString GetTestDataDir();
 		static void GetFPS(const UWorld* World, TArray<float>* FPS);
 		static float GetAvarageFPS(TArray<float>* FPS);
-		static multiparam_fps GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character);
+		static multiparam_fps_ram GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character);
+		static void GetRAM(TArray<float>* RAM);
+		static float GetAvarageRAM(TArray<float>* RAM);
+		static multiparam_fps_ram GetRAMwithCurrentPosition(const ACharacter* Character);
 };
 
 //Класс позволяющий выполнять определенную функцию определенное количество времени.
