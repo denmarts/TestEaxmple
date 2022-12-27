@@ -19,8 +19,7 @@
 #include "Components/SplineMovementController.h"
 #include "GameFramework/Actor.h"
 #include "Camera/CameraActor.h"
-#include "HAL/PlatformMemoryHelpers.h"
-#include "MainFrame/Private/MainFrameModule.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // Функции для непосредственного тестирования:
 //   TestTrue(TEXT("Некоторое сообщение которое пишется в log если проверка не прошла"), bool <Проверочное предполагаемо логически верное значение>); -> пример использования в тесте "TestTrueExample"
@@ -53,12 +52,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSplineMovementSimulation, "Autotests.SplineMov
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoupleOfDifferentActorsCanDoThingsSimultaniously, "Autotests.CoupleOfDifferentActorsCanDoThingsSimultaniously", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFPSMeasurmentsTest, "Autotests.FPSMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRAMMeasurmentsTest, "Autotests.RAMMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCSVToolInteraction, "Autotests.CSVToolInteraction", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 // Тестов в одном файле может быть столько сколько нужно, но желательно структурировать их в отдельные файлы ориентируясь на назначения
 
 //В данной категории находятся тесты, которые либо не работают должным образом, либо не доделаны, либо крашат эдитор
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckExample, "Experimental.CheckTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWorldExists, "Experimental.WorldExistsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestCheckAddWarningAndAddExpectedErrorExample, "Experimental.CheckAddWarningAndAddExpectedErrorTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDataWritingIntoFileTest, "Experimental.DataWritingIntoFileTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 
 // Подход с использованием COMPLEX_AUTOMATION_TEST отличается от SIMPLE_AUTOMATION_TEST лишь тем, что в нем присутствует вспомогательная функция GetTests()
 // Благодаря которой можно формировать массив параметров OutBeautifiedNames (по сути это пути расположения тестов в Session Frontend, как вот этот -> "Experimental.MapsShouldBeLoaded")
@@ -889,7 +890,6 @@ bool FFPSMeasurmentsTest::RunTest(const FString& Parameters)
                 currentCompFPS.CameraRotation.Pitch, currentCompFPS.CameraRotation.Yaw, currentCompFPS.CameraRotation.Roll);
         }
         const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
-        UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
         TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
         
         //Частично решает проблему, мануально через delete очистить данный массив поинтеров в контексте латентной команды
@@ -940,7 +940,6 @@ bool FRAMMeasurmentsTest::RunTest(const FString& Parameters)
         const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
         UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
         TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
-
         //И тут, к сожалению, история такая же как и в тесте выше
         LinkedRAM->Empty();
     },
@@ -949,5 +948,94 @@ bool FRAMMeasurmentsTest::RunTest(const FString& Parameters)
     return true;
 }
 
+//Снятие метрик и генерация CSV-файла с необходимыми метриками
+bool FCSVToolInteraction::RunTest(const FString& Parameters)
+{
+    AddInfo(TEXT("CSVToolInteraction is running"));
+
+    AutomationOpenMap(TEXT("/Game/Tests/EmptyLevel_Testable_ForRun"));
+    UWorld* World = HelperFunctions::GetTestWorld();
+    TestNotNull(TEXT("World exist"), World);
+    
+    ACharacter* Character = UGameplayStatics::GetPlayerCharacter(World, 0);
+    TestNotNull(TEXT("Character exist"), Character);
+
+    const char* goldenSpherePath = "Blueprint'/Game/Collectibles/GoldenSphere.GoldenSphere'";
+    const UBlueprint* goldenSphere = LoadObject<UBlueprint>(nullptr, *FString(goldenSpherePath));
+    TestNotNull(TEXT("Blueprint exist"), goldenSphere);
+    
+    const int32 MovingIndex = HelperFunctions::GetAxisBindingsIndexByName(Character->InputComponent, "Move Forward / Backward"); //"Move Forward / Backward" - это направления движения. Посмотреть уже предусмотренные бинды можно в Settings->Project Settings->Inputs. 
+    UE_LOG(LogTemp, Warning, TEXT("Current moving index is: %i"), MovingIndex);
+
+    UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres before: %i"), HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass));
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(3.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([=]()
+    {
+        //Запускаем профайлер перед запуском основного теста
+        FCsvProfiler::Get()->BeginCapture();
+    }, 1.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilCommand([=]()
+    {
+        Character->InputComponent->AxisBindings[MovingIndex].AxisDelegate.Execute(1.0f); //1.0f - это scale данного бинда. Могут быть разными, открывайте конкретный бинд и ищите нужное значение. Для движения вперед scope = 1.0f. Назад, к примеру, будет -1.0f 
+    }, [=]()
+    {
+        const int32 NumberOfTheObjects = HelperFunctions::CountingObjectsOnTheMap(World, goldenSphere->GeneratedClass);
+        UE_LOG(LogTemp, Warning, TEXT("Number of golden spheres after: %i"), NumberOfTheObjects);
+        TestTrue("Number of the golden spheres should be zero", NumberOfTheObjects == 0);
+    },
+    2.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FDelayedFunctionLatentCommand([=]()
+    {
+        //После выполнения основных механик, стопим профайлер. После этого .csv файл будет сохранен по пути
+        //Saved/Profiler/CSV/ после чего его необходимо будет переконвертировать в .html формат с графиками и прочим
+        //для этого был создан специальный .bat-файл (convert_csv_into_report.bat) в папке devops, который переконвертирует
+        //ваш .csv и сохранит его в ту же дерикторию. Только поменяйте используемые пути в config.bat под свой проект.
+        FCsvProfiler::Get()->EndCapture();
+    }, 1.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(5.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
+    return true;
+}
+
+//На данный момент не работает, должно записывать подсчитаные ФПС в файл, крашит эдитор при записи элементов в массив
+bool FDataWritingIntoFileTest::RunTest(const FString& Parameters)
+{
+    AutomationOpenMap(TEXT("/Game/Tests/EmptyLevel_Testable_ForRun"));
+    const UWorld* World = HelperFunctions::GetTestWorld();
+    TestNotNull(TEXT("World exist"), World);
+    
+    const ACharacter* Character = UGameplayStatics::GetPlayerCharacter(World, 0);
+    TestNotNull(TEXT("Character exist"), Character);
+    
+    const int32 MovingIndex = HelperFunctions::GetAxisBindingsIndexByName(Character->InputComponent, "Move Forward / Backward"); //"Move Forward / Backward" - это направления движения. Посмотреть уже предусмотренные бинды можно в Settings->Project Settings->Inputs. 
+    UE_LOG(LogTemp, Warning, TEXT("Current moving index is: %i"), MovingIndex);
+    
+    TArray<HelperFunctions::multiparam_fps_ram> LinkedFPS;
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(3.0f)); 
+    ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilCommand([=, &LinkedFPS]()
+    {
+        LinkedFPS.Add(HelperFunctions::GetFPSwithCurrentPosition(World, Character));
+        Character->InputComponent->AxisBindings[MovingIndex].AxisDelegate.Execute(1.0f);
+    }, [=, &LinkedFPS]()
+    {
+        for(const auto currentCompFPS : LinkedFPS)
+        {
+            const FString Data = FString::SanitizeFloat(currentCompFPS.FPS_or_RAM) + " " + FString::SanitizeFloat(currentCompFPS.PlayerPosition.X) + " " +
+                FString::SanitizeFloat(currentCompFPS.PlayerPosition.Y) + " " + FString::SanitizeFloat(currentCompFPS.PlayerPosition.Z) + " " +
+                    FString::SanitizeFloat(currentCompFPS.CameraRotation.Pitch) + " " + FString::SanitizeFloat(currentCompFPS.CameraRotation.Yaw) + " " +
+                        FString::SanitizeFloat(currentCompFPS.CameraRotation.Roll);
+
+                        if(!HelperFunctions::WriteStringIntoFile("FPSMeasurments", Data))
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("Some of your data hasn't been written"));
+                        }
+        }
+    },
+    2.0f));
+    ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
+    return true;
+}
 
 //#endif

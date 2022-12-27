@@ -19,12 +19,14 @@ class HelperFunctions
 		static int32 CountingObjectsOnTheMap(const UWorld* World, const AActor* Actor);
 		static int32 CountingObjectsOnTheMap(const UWorld* World, UClass* ClassOfTheActor);
 		static FString GetTestDataDir();
-		static void GetFPS(const UWorld* World, TArray<float>* FPS);
+		static float GetFPS(const UWorld* World);
 		static float GetAvarageFPS(TArray<float>* FPS);
 		static multiparam_fps_ram GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character);
 		static void GetRAM(TArray<float>* RAM);
 		static float GetAvarageRAM(TArray<float>* RAM);
 		static multiparam_fps_ram GetRAMwithCurrentPosition(const ACharacter* Character);
+		static bool WriteStringArrayIntoFile(const FString InFileName, TArray<FString> ParametersToWrite, bool Rewrite);
+		static bool WriteStringIntoFile(const FString InFileName, FString StringToWrite);
 };
 
 //Класс позволяющий выполнять определенную функцию определенное количество времени.

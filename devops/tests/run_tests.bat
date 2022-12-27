@@ -3,7 +3,7 @@
 call "%~dp0\..\config.bat"
 
 rem run tests
-"%EditorPath%" "%ProjectPath%" -nosplash -log ^
+"%EditorPath%" "%ProjectPath%" -nosplash -log -nosound -benchmark -noailogging -noverifugc -novsync -csvGpuStats ^
 -ExecCmds="Automation RunTests %TestNames%;Quit" -abslog="%TestOutputLogPath%"^
 -ReportExportPath="%ReportOutputPath%"
 

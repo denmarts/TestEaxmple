@@ -3,6 +3,8 @@
 #include "GameFramework/Character.h"
 #include "HAL/PlatformMemoryHelpers.h"
 #include "Kismet/GameplayStatics.h"
+//#include "HAL/Thread.h"
+
 
 UWorld* HelperFunctions::GetTestWorld() 
 {
@@ -81,12 +83,13 @@ FString HelperFunctions::GetTestDataDir()
     return FPaths::GameSourceDir().Append("TestExamplePr_git/Tests/Data/");
 }
 
-void HelperFunctions::GetFPS(const UWorld* World, TArray<float>* FPS)
+float HelperFunctions::GetFPS(const UWorld* World)
 {
-    if(World && FPS)
+    if(World)
     {
-        FPS->Add(1.0f / World->GetDeltaSeconds());
+       return 1.0f / World->GetDeltaSeconds();
     }
+    return -1.0f;
 }
 
 float HelperFunctions::GetAvarageFPS(TArray<float>* FPS)
@@ -141,6 +144,48 @@ HelperFunctions::multiparam_fps_ram HelperFunctions::GetRAMwithCurrentPosition(c
         return {static_cast<float>(PlatformMemoryHelpers::GetFrameMemoryStats().UsedPhysical / 1.0e+6), Character->GetActorLocation(), Character->GetViewRotation()};
     }
     return {-1.0, FVector{}, FRotator{}};
+}
+
+bool HelperFunctions::WriteStringArrayIntoFile(FString InFileName, TArray<FString> ParametersToWrite, bool Rewrite)
+{
+    const FString Filename = InFileName;
+    FString File = FPaths::ProjectSavedDir();
+    File.Append(TEXT("/Profiling/CSV/")).Append(Filename).Append(".csv");
+    
+    IPlatformFile& FileManager = FPlatformFileManager::Get().GetPlatformFile();
+    if (FileManager.FileExists(*File) && Rewrite)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Warning, rewrite paramether is true. The existing data will be terminated"));
+        FileManager.DeleteFile(*File);
+    }
+
+    if(!FFileHelper::SaveStringArrayToFile(ParametersToWrite, *File))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("FileManipulation: Failed to write FString to file."));
+        return false;
+    }
+    return true;
+}
+
+bool HelperFunctions::WriteStringIntoFile(FString InFileName, FString ParameterToWrite)
+{
+    const FString Filename = InFileName;
+    FString File = FPaths::ProjectSavedDir();
+    File.Append(TEXT("/Profiling/CSV/")).Append(Filename).Append(".csv");
+    
+    IPlatformFile& FileManager = FPlatformFileManager::Get().GetPlatformFile();
+    if (FileManager.FileExists(*File))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Warning, rewrite paramether is true. The existing data will be terminated"));
+        FileManager.DeleteFile(*File);
+    }
+
+    if(!FFileHelper::SaveStringToFile(ParameterToWrite, *File))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("FileManipulation: Failed to write FString to file."));
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -223,6 +268,8 @@ bool FTakeScreenshotAutomationCommand::Update()
     }
     return CommandCompleted;
 }
+
+
 
 
 
