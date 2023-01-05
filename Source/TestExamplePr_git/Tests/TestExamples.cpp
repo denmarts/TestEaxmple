@@ -53,6 +53,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoupleOfDifferentActorsCanDoThingsSimultanious
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFPSMeasurmentsTest, "Autotests.FPSMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRAMMeasurmentsTest, "Autotests.RAMMeasurmentsTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCSVToolInteraction, "Autotests.CSVToolInteraction", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FStressTestExperiment, "Autotests.StressTestExperiment", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter);
 // Тестов в одном файле может быть столько сколько нужно, но желательно структурировать их в отдельные файлы ориентируясь на назначения
 
 //В данной категории находятся тесты, которые либо не работают должным образом, либо не доделаны, либо крашат эдитор
@@ -805,7 +806,6 @@ void FScreenshotTests::Define()
 //Тест демонстрирующий возможность спавна одновременно нескольких персонажей для выполнения последующих команд
 bool FCoupleOfDifferentActorsCanDoThingsSimultaniously::RunTest(const FString& Parameters)
 {
-    
     const char* Character_Follow = "/Script/Engine.Blueprint'/Game/Tests/AI/Testable_AI_Character.Testable_AI_Character'";
     const char* Character_Random = "/Script/Engine.Blueprint'/Game/Tests/AI/Testable_AI_Character_V2.Testable_AI_Character_V2'";
     const TArray<UBlueprint*> AICharacters =
@@ -818,29 +818,25 @@ bool FCoupleOfDifferentActorsCanDoThingsSimultaniously::RunTest(const FString& P
         TestNotNull(TEXT("Blueprint exists"), currentCharacter);
     }
     
-    //const char* AIControllerRandomLocation = "/Script/Engine.Blueprint'/Game/Tests/AI/Test_AI_Controller_V2.Test_AI_Controller_V2'";
-    //const char* AIControllerFollowMe = "/Script/Engine.Blueprint'/Game/Tests/AI/Test_AIController_V1.Test_AIController_V1'";
-    /*
+    const char* AIControllerRandomLocation = "/Script/Engine.Blueprint'/Game/Tests/AI/Test_AI_Controller_V2.Test_AI_Controller_V2'";
+    const char* AIControllerFollowMe = "/Script/Engine.Blueprint'/Game/Tests/AI/Test_AIController_V1.Test_AIController_V1'";
+    
     const TArray<UBlueprint*> AIControllers = {
         LoadObject<UBlueprint>(nullptr, *FString(AIControllerRandomLocation)),
         LoadObject<UBlueprint>(nullptr, *FString(AIControllerFollowMe))
     };
     
-    */
-    
     AutomationOpenMap(TEXT("/Game/Tests/AI/EmptyLevel_AI_Testable"));
     UWorld* World = HelperFunctions::GetTestWorld();
     TestNotNull(TEXT("World exists"), World);
-
+    
     constexpr int32 spawnCharacterCount = 5;
-    float spaceBetween = 100.0f;
+    float spaceBetween = 100;
     for(int i = 0; i < spawnCharacterCount; i++)
     {
         ACharacter* Character = World->SpawnActor<ACharacter>(AICharacters[FMath::RandRange(0, AICharacters.Num() - 1)] ->
             GeneratedClass, FTransform {FVector{1600.0f, -100.0f + spaceBetween, 140.0f}});
         Character->SetActorRotation({0.0f, 180.0f, 0.0f});
-        //Character->AIControllerClass = AIControllers[FMath::RandRange(0, 1)]->GeneratedClass;
-        //Character->PossessedBy(AIControllers[FMath::RandRange(0, 1)]->GeneratedClass);
         spaceBetween += 100;
     }
     ADD_LATENT_AUTOMATION_COMMAND(FEngineWaitLatentCommand(15.0f));
@@ -1037,5 +1033,72 @@ bool FDataWritingIntoFileTest::RunTest(const FString& Parameters)
     ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
     return true;
 }
+
+bool FStressTestExperiment::RunTest(const FString& Parameters)
+{
+    const char* AIControllerFollowMe = "/Script/Engine.Blueprint'/Game/Tests/AI/Test_AIController_V1.Test_AIController_V1'";
+    const auto SpawnedController = LoadObject<UBlueprint>(nullptr, *FString(AIControllerFollowMe));
+    const char* CharacterBPName = "/Script/Engine.Blueprint'/Game/Tests/AI/Testable_Character.Testable_Character'";
+    const auto SpawnedCharacterBP = LoadObject<UBlueprint>(nullptr, *FString(CharacterBPName));
+    
+    AutomationOpenMap(TEXT("/Game/Tests/AI/EmptyLevel_AI_Testable"));
+    UWorld* World = HelperFunctions::GetTestWorld();
+    TestNotNull(TEXT("World exists"), World);
+
+    GEngine->Exec(World, TEXT("stat fps"));
+
+    //Через стандартный капчур-лист через ссылку эти переменные менять невозможно (я не знаю почему, на 1000% делал все верно)
+    //потому в качестве обходного пути данные переменные сделаны статическими
+    static float StartTime = 0.0f;
+    static int32 NumberOfPlayers = 0;
+    static int32 DroppedFps = 0;
+    
+    ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([=]
+    {
+        StartTime = World->GetTimeSeconds();
+        DroppedFps = 0;
+        NumberOfPlayers = 0;
+        return true;
+    }));
+    ADD_LATENT_AUTOMATION_COMMAND(FTestExampleUntilTrueCommand([=]
+    {
+        if(1.0f / World->GetDeltaSeconds() < 55.0f)
+        {
+            DroppedFps++;
+        }
+        if(World->GetTimeSeconds() - StartTime >= 2.0f)
+        {
+            ACharacter* Character = World->SpawnActor<ACharacter>(SpawnedCharacterBP->GeneratedClass, FTransform{FVector{1600.0f, -100.0f, 140.0f}});
+            TestNotNull(TEXT("Character exists"), Character);
+            Character->SetActorRotation({0.0f, 180.0f, 0.0f});
+    
+            AController* Controller = World->SpawnActor<AController>(SpawnedController->GeneratedClass);
+            TestNotNull(TEXT("Controller exists"), Controller);
+            
+            const auto Pawn = Cast<APawn>(Character);
+            TestNotNull(TEXT("Pawn exists"), Pawn);
+            Controller->Possess(Pawn);
+
+            StartTime = World->GetTimeSeconds();
+            NumberOfPlayers++;
+            DroppedFps = 0;
+        }
+    }, 
+    [=]
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Avarage FPS dropped to 55.0 when number of spawned players is %i"), NumberOfPlayers);
+    },
+    [=]
+    {
+        if(DroppedFps >= 10)
+        {
+            return true;
+        }
+        return false;
+    }));
+    ADD_LATENT_AUTOMATION_COMMAND(FExitGameCommand);
+    return true;
+}
+
 
 //#endif

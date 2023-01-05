@@ -2,7 +2,7 @@
 
 rem Engine params
 set EnginePath_5.1=D:\Engines\UE_5.1
-set EnginePath_5.0=D:\Engines\UE_5.0
+set EnginePath_5.0=D:\Engines\UE_5.0\UnrealEngine
 
 set UBTRelativePath4=Engine\Binaries\DotNET\UnrealBuildTool.exe
 set UBTRelativePath5=Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe

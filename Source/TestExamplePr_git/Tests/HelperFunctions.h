@@ -21,6 +21,7 @@ class HelperFunctions
 		static FString GetTestDataDir();
 		static float GetFPS(const UWorld* World);
 		static float GetAvarageFPS(TArray<float>* FPS);
+		static float GetAvarageFPS(TArray<float> FPS);
 		static multiparam_fps_ram GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character);
 		static void GetRAM(TArray<float>* RAM);
 		static float GetAvarageRAM(TArray<float>* RAM);
@@ -42,6 +43,20 @@ class FTestExampleUntilCommand : public IAutomationLatentCommand
 		TFunction<void()> Callback;
 		TFunction<void()> TimeoutCallback;
 		float Timeout;
+};
+
+class FTestExampleUntilTrueCommand : public IAutomationLatentCommand
+{
+public:
+	FTestExampleUntilTrueCommand(TFunction<void()> InCallback, TFunction<void()> InTimeoutCallback, TFunction<bool()> InCheckTimeout)
+		: Callback(MoveTemp(InCallback)), TimeoutCallback(MoveTemp(InTimeoutCallback)), CheckTimeout(MoveTemp(InCheckTimeout)) {}
+
+	virtual bool Update() override;
+
+private:
+	TFunction<void()> Callback;
+	TFunction<void()> TimeoutCallback;
+	TFunction<bool()> CheckTimeout;
 };
 
 class FSimulateMovementLatentCommand : public IAutomationLatentCommand

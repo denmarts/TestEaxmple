@@ -8,6 +8,6 @@ public class TestExamplePr_git : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "HeadMountedDisplay", "Json", "JsonUtilities", "FunctionalTesting", "AITestSuite" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "HeadMountedDisplay", "Json", "JsonUtilities", "FunctionalTesting", "AITestSuite", "GameplayTasks", "NavigationSystem" });
 	}
 }

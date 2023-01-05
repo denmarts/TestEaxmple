@@ -106,6 +106,20 @@ float HelperFunctions::GetAvarageFPS(TArray<float>* FPS)
     return -1.0f;
 }
 
+float HelperFunctions::GetAvarageFPS(TArray<float> FPS)
+{
+    if(FPS.Num() > 0)
+    {
+        float avarageFPS = 0.0f;
+        for(const auto currentFPS : FPS)
+        {
+            avarageFPS += currentFPS;
+        }
+        return avarageFPS /= FPS.Num();
+    }
+    return -1.0f;
+}
+
 HelperFunctions::multiparam_fps_ram HelperFunctions::GetFPSwithCurrentPosition(const UWorld* World, const ACharacter* Character)
 {
     if(World && Character)
@@ -196,6 +210,21 @@ bool FTestExampleUntilCommand::Update()
 {
     const double NewTime = FPlatformTime::Seconds();
     if (NewTime - StartTime >= Timeout)
+    {
+        TimeoutCallback();
+        return true;
+    }
+    Callback();
+    return false;
+}
+
+/**
+ * @FTestExampleUntilTrueCommand
+ */
+
+bool FTestExampleUntilTrueCommand::Update()
+{
+    if (CheckTimeout())
     {
         TimeoutCallback();
         return true;
